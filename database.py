@@ -36,12 +36,14 @@ def setup_database():
     )
     cursor = database.cursor(buffered=True)
 
+    # User table
     cursor.execute(
         "CREATE TABLE user ("
         "discord_id INT UNIQUE NOT NULL PRIMARY KEY,"
         "username VARCHAR(255) NOT NULL"
         ");"
     )
+    # Month table
     cursor.execute(
         "CREATE TABLE month ("
         "id INT AUTO_INCREMENT PRIMARY KEY,"
@@ -49,14 +51,17 @@ def setup_database():
         "year INT NOT NULL"
         ");"
     )
+    # Meme table
     cursor.execute(
         "CREATE TABLE meme ("
         "id INT AUTO_INCREMENT PRIMARY KEY, "
         "name VARCHAR(255) NOT NULL,"
+        "attachment VARCHAR(255),"
         "month int NOT NULL,"
         "FOREIGN KEY (month) REFERENCES month(id)"
         ");"
     )
+    # Vote table
     cursor.execute(
         "CREATE TABLE vote ("
         "id INT AUTO_INCREMENT PRIMARY KEY,"

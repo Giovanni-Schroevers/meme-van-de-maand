@@ -1,0 +1,4 @@
+aiocron~=1.7
+mysql-connector-python~=8.0.26
+matplotlib~=3.4.3
+python-dotenv~=0.10.3

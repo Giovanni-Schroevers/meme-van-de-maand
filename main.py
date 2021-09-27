@@ -15,14 +15,24 @@ database, cursor = setup_database()
 bot = discord.Bot()
 
 
+def get_month():
+    now = datetime.datetime.today()
+
+    cursor.execute(f"SELECT id FROM month WHERE month = '{now.month}' AND year = '{now.year}'")
+    result = cursor.fetchall()
+    database.commit()
+    return int(result[0][0])
+
+
 @bot.slash_command()
-async def nominate(ctx, meme: str):
+async def nominate(ctx, meme: str, attachment: str = None):
     meme = meme
     now = datetime.datetime.today()
 
     try:
-        cursor.execute(f"SELECT * FROM month WHERE month = '{now.month}'")
+        cursor.execute(f"SELECT * FROM month WHERE month = '{now.month}' AND year = '{now.year}'")
         result = cursor.fetchall()
+        database.commit()
 
         if not result:
             sql = "INSERT INTO month (month, year) VALUES (%s, %s)"
@@ -30,13 +40,14 @@ async def nominate(ctx, meme: str):
             cursor.execute(sql, val)
             database.commit()
 
-        sql = "INSERT INTO meme (name, month) VALUES (%s, %s)"
-        val = (meme, cursor.lastrowid or result[0][0])
+        sql = "INSERT INTO meme (name, month, attachment) VALUES (%s, %s, %s)"
+        val = (meme, result[0][0] or cursor.lastrowid, attachment)
         cursor.execute(sql, val)
         database.commit()
     except mysql.connector.errors.IntegrityError as e:
         print(e)
         await ctx.respond(f"Er is iets fout gegaan tijdens het toevoegen van de meme")
+        return
 
     await ctx.respond(f"Meme {meme} is toegevoegd aan de poll")
 
@@ -57,11 +68,12 @@ async def vote(ctx, meme_1: int, meme_2: int, meme_3: int):
     try:
         cursor.execute(f"SELECT id FROM month WHERE month = '{now.month}' AND year = '{now.year}'")
         result = cursor.fetchall()
-        print(result)
+        database.commit()
         month = int(result[0][0])
 
         cursor.execute(f"SELECT * FROM user WHERE discord_id = '{user.id}'")
         result = cursor.fetchall()
+        database.commit()
 
         if not result:
             sql = "INSERT INTO user (discord_id, username) VALUES (%s, %s)"
@@ -72,6 +84,7 @@ async def vote(ctx, meme_1: int, meme_2: int, meme_3: int):
         for meme in memes:
             cursor.execute(f"SELECT * FROM meme WHERE id = '{meme}' AND month = {month}")
             result = cursor.fetchall()
+            database.commit()
 
             if not result:
                 await ctx.respond("Meme kon niet worden gevonden")
@@ -91,12 +104,43 @@ async def vote(ctx, meme_1: int, meme_2: int, meme_3: int):
     except mysql.connector.errors.IntegrityError as e:
         print(e)
         await ctx.respond(f"Er is iets fout gegaan tijdens het stemmen")
+        return
 
     await ctx.respond(f"Je hebt gestemd {user.name}!")
 
 
+# @aiocron.crontab('0 12 1 * *')
 @aiocron.crontab('* * * * *')
-async def send_poll():
+async def start_poll():
+    channel = bot.get_channel(799298071749328896)
+    month = get_month()
+    text = "@kaas er is weer te stemmen voor meme van de maand. De memes van deze week zijn: \n"
+
+    try:
+        cursor.execute(f"SELECT * FROM meme WHERE month = '{month}'")
+        memes = cursor.fetchall()
+        database.commit()
+        print(memes)
+
+        for meme in memes:
+            print(meme)
+            text += f"{meme[0]}. {meme[1]}"
+            if meme[2]:
+                text += f" ({meme[2]})"
+            text += "\n"
+
+    except mysql.connector.errors.IntegrityError as e:
+        print(e)
+        await channel.send("Er is iets fout gegaan tijdens het maken van de poll")
+        return
+
+    text += "Er is op een meme te stemmen met /vote en de bijbehorende nummers van de memes"
+
+    await channel.send(text)
+
+
+@aiocron.crontab('0 12 2 * *')
+async def send_poll_results():
     channel = bot.get_channel(799298071749328896)
     now = datetime.datetime.today()
     votes = {}
@@ -108,11 +152,13 @@ async def send_poll():
 
         cursor.execute(f"SELECT * FROM meme WHERE month = '{month}'")
         result = cursor.fetchall()
+        database.commit()
         memes = result
 
         for meme in memes:
             cursor.execute(f"SELECT * FROM vote WHERE meme = '{meme[0]}'")
             result = cursor.fetchall()
+            database.commit()
 
             votes[meme[1]] = len(result)
 
@@ -136,7 +182,7 @@ async def send_poll():
         ax.text(rect.get_x() + rect.get_width() / 2, height, label,
                 ha='center', va='bottom')
     plt.savefig('votes.png')
-    await channel.send("De uitslag van deze maand @here:", file=discord.File('votes.png'))
+    await channel.send("De uitslag van deze maand @kaas:", file=discord.File('votes.png'))
 
 
 bot.run(os.getenv("BOT_TOKEN"))
